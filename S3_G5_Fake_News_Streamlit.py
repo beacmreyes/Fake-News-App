@@ -368,7 +368,7 @@ def about_the_data():
     st.header("Quick stats from Rappler news articles")
 
     col1, col2 =st.columns([2,5])
-    col1.write(article_count_num(df), unsafe_allow_html=True)    
+    col1.write(article_count_num(df,''), unsafe_allow_html=True)    
     col2.altair_chart(article_count_period(df, 'Monthly' ,'Start of Month','', '#1E90FF'), use_container_width=True)
     
 # Page 2 content
