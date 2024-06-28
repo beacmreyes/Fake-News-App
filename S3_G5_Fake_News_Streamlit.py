@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -28,7 +27,7 @@ nltk.download('wordnet') # Downloads the WordNet lemmatizer data
 
 st.set_page_config(layout='wide')
 
-api_key = st.secrets["api_key"]##open('openaiapikey.txt').read() ##
+api_key = st.secrets["api_key"]##  open('openaiapikey.txt').read() ##
 client = OpenAI(api_key=api_key)
 SKLLMConfig.set_openai_key(api_key)
 
@@ -505,11 +504,11 @@ def common_filter():
 def about_the_data():
     st.title(":mag_right: A Philippine Fake News Exploration App")
     st.markdown("This Streamlit app is a response to the campaign against [misinformation and disinformation](https://www.un.org/en/countering-disinformation) in the Philippines.")
-    st.markdown("It offers an in-depth analysis of the Philippine Fake News Corpus, which comprises web-scraped news articles from January 1, 2016, to October 31, 2018. For this prototype app, only the articles published from 2018 will be used. For more information about the dataset, you may access [this link](https://github.com/aaroncarlfernandez/Philippine-Fake-News-Corpus/tree/master).")
+    st.markdown("It offers an in-depth analysis of the Philippine Fake News Corpus, which comprises web-scraped news articles from January 1, 2016, to November 16, 2018. For this prototype app, only the articles published from 2018 will be used. For more information about the dataset, you may access [this link](https://github.com/aaroncarlfernandez/Philippine-Fake-News-Corpus/tree/master).")
 
     st.header("Preview of the dataset")
     st.write(df.head())
-    st.header("Quick stats from Rappler news articles")
+    st.header("Quick stats from News articles")
 
     col1, col2 =st.columns([2,5])
     col1.write(article_count_num(df[['Headline', 'Content', 'Date', 'Source', 'Authors', 'URL', 'Label']],''), unsafe_allow_html=True)    
@@ -853,46 +852,69 @@ def ml_news_classifier():
 
 
 def interactive_quiz():
-    st.title("Test Yourself!")
+    df = pd.read_csv('data/Philippine Fake News Corpus - cleaned.csv')
+    df_ui = pd.read_csv('data/verified_samples.csv')
+    
+    st.title("Test Yourself! :brain:")
     st.header("Can You Identify Which Claims are More Likely to be False?")
     
+    st.write("Below are headlines of a few examples of verified and fact-checked articles. Choose a headline below to view its contents.")
+    st.write("A few statements derived from this article will be given to you. Take your time and read through the article. For each claim or statement, decide whether or not this is more likely true :white_check_mark:, or more likely false :x:. Click on the button to see if your answer is correct.")
+    st.write("At the end of each section, you can also try to see what chatGPT had to say :nerd_face:.")
     
-    st.write("Choose a headline below from below to view its contents. Five statements derived from this article will be given to you. Take your time and read through the article. For each claim or statement, decide whether or not this is more likely true, or more likely false. Click on the button to see if your answer is correct.")
-
-    headline_temp = None
-    headlines = df['Headline'].to_list()
-    headline_temp = st.selectbox('Select article title', headlines , index=None)
-
-    article = None
-    if headline_temp is not None:    
-        article = df[df['Headline']==headline_temp].iloc[0]
+    @st.cache_resource(show_spinner = "loading response...please wait :hourglass:")
+    def verify_claim(article, claim, label):
+        system_prompt = 'You are a news analyst tasked to fact-check the claims made in news articles.'
+        main_prompt = f"""
+        The {article} is said to be {label}.
+        Do not mention the word 'Series'.
+        If {claim} is said to be {label}, give an explanation for the average reader why this is so. 
+        Explain this as if you were trying to educate the average reader in a respectful tone."""
+        response = client.chat.completions.create(
+            model='gpt-3.5-turbo', 
+            messages = [{'role': 'system', 'content': system_prompt},
+                        {'role': 'user', 'content': main_prompt}])
+        return response.choices[0].message.content
     
-    if article is not None:
-        article_sample_content = article['Content']
-    
-        st.markdown("*You may read the entire article down below to help you decide.*")
-        with st.expander("Here is the full article: click to expand"):
-            st.header(f"[{article['Headline']}]({article['URL']})")
-            st.caption(f"__Published date:__ {article['Date']}")# Main function to run the Streamlit app
-            st.write(article_sample_content)
-        try:
-            identified_claims = identify_claims(article = article_sample_content)
-            claims = [claim for claim in identified_claims[:-1].split('; ')]
-            for i, claim in enumerate(claims):
-                st.divider()
-                st.write(f"##### {claim}.")
-                choice = st.radio(label = '', 
-                                  options = ['This is more likely True.', 'This is more likely False.'], 
-                                  key = f"radio_{i}")
-                if st.button("Check Answer", key = f"button_{i}", type = "primary"):
-                    st.write(verify_claims(article = article_sample_content, claim = claim))
-        except:
-            pass
-        # this is the disclaimer message section hehehehe
+    title = st.selectbox('', df_ui['Headline'].unique(), index=None)
+    try:
+        if title:
+            sample_df = df_ui[df_ui['Headline'] == title]
+            article = df[df['Headline'] == title]
+            article_content = df[df['Headline']==title].iloc[0]['Content']
+            st.markdown("*Please read the entire article down below to help you decide.*")
+            with st.expander("Here is the full article: click to expand"):
+                st.header(title)
+                st.write(article_content)
         
-        st.divider()
+        statements = [text for text in sample_df['Statements']]
+        verified_claims = [text for text in sample_df['Cross reference']]
         
-        with st.expander("Read the Disclaimer"):
+        for i, text in enumerate(statements):
+            st.markdown(f"##### Statement #{i+1}: {text}")
+            choice = st.radio(label = '',
+                              options = ['This is more likely True.', 'This is more likely False.'],
+                              key = f"radio_{i}")
+            if st.button("Check Answer", key = f"button_{i}", type = "primary"):
+                if (choice == 'This is more likely True.') & (sample_df.iloc[i]['Verification']):
+                    st.write("**You are correct!**")
+                elif (choice == 'This is more likely False.') & ~(sample_df.iloc[i]['Verification']):
+                    st.write("**You are correct!**")
+                else:
+                    st.write("**Sorry! Unfortunately, your choice was wrong. Please try again.**")
+                
+                if sample_df.iloc[i]['Verification']:
+                    st.write("**This statement is True.**")
+                else:
+                    st.write("**This statement is False.**")
+                st.write(verified_claims[i])
+                response = verify_claim(article = article_content, claim = text, label = sample_df.iloc[i]['Label'])
+                st.write("*Want to see what else chatGPT have to say?*")
+                with st.expander("Click to see what else chatGPT had to say."):
+                    st.write(response)
+            st.divider()
+        
+        with st.expander("Read the :warning:Disclaimer:warning:"):
             st.markdown("#### DISCLAIMER:")
             st.write("The information and responses provided by this application are generated using OpenAI's ChatGPT. While we strive to provide accurate and helpful information, it is important to note the following: ")
             st.markdown("1. **Accuracy:** The responses generated by ChatGPT are based on patterns and information from a wide range of sources, but they may not always be accurate, complete, or up-to-date. Users should independently verify any information provided by the application with credible news sources.")
@@ -900,7 +922,10 @@ def interactive_quiz():
             st.markdown("3. **Bias:** The responses may reflect biases present in the training data. OpenAI has made efforts to reduce such biases, but they may still occasionally be present in the output.")
             st.markdown("4. **Limitations:** ChatGPT cannot provide legal, medical, financial, or other professional advice. This application's purpose is to _guide the reader's discernment when encountering a news article containing facts or statements which may or may not be factual or credible._")
             st.markdown("5. **Responsibility:** The use of this application is at your own risk. We are not responsible for any consequences arising from the use of the information provided by ChatGPT.")
-            st.markdown("By using this application, you acknowledge and accept these limitations and agree to use the information provided responsibly.")            
+            st.markdown("By using this application, you acknowledge and accept these limitations and agree to use the information provided responsibly.")
+    except:
+        pass
+ 
 
 def main():
 
