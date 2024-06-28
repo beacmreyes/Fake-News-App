@@ -19,6 +19,7 @@ import openai
 from openai import OpenAI
 
 nltk.download('punkt')
+nltk.download('stopwords')
 st.set_page_config(layout='wide')
 
 api_key = st.secrets["api_key"]#open('openaiapikey.txt').read()
