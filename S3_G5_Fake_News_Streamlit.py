@@ -20,7 +20,7 @@ from openai import OpenAI
 
 st.set_page_config(layout='wide')
 
-api_key = st.secrets["api_key"] #open('openaiapikey.txt').read()
+api_key = open('openaiapikey.txt').read()
 client = OpenAI(api_key=api_key)
 SKLLMConfig.set_openai_key(api_key)
 df = pd.read_csv("data/Philippine Fake News Corpus - cleaned.csv")
@@ -569,18 +569,18 @@ def news_summarization():
                 highlighted_keywords += f"<span style='background-color:#0041C2;padding: 5px; border-radius: 5px; margin-right: 5px;'>{keyword}</span>"
     
             st.markdown(highlighted_keywords, unsafe_allow_html=True)    
-            # st.caption('**ENTITIES WITH SENTIMENTS**')
+            st.caption('**ENTITIES WITH SENTIMENTS**')
+            try:
+                st.subheader("Article's sentiment on entities mentioned")                     
+                identify_entities2 = identify_entities_with_sentiment(article)
+                st.write(identify_entities2)
+            except:
+                 pass
             # try:
-            #     st.subheader("Article's sentiment on entities mentioned")                     
-            #     identify_entities2 = identify_entities_with_sentiment(article)
-            #     st.write(identify_entities2)
-            # except:
-            #      pass
-            # try:
-            entities = identify_entities(article['Content'])
-            entity_sentiment = identify_entity_sentiment(article['Content'], entities)
-            entity_sentiment_claims = support_claims(article['Content'], entity_sentiment)
-            st.write(entity_sentiment_claims)
+            # entities = identify_entities(article['Content'])
+            # entity_sentiment = identify_entity_sentiment(article['Content'], entities)
+            # entity_sentiment_claims = support_claims(article['Content'], entity_sentiment)
+            # st.write(entity_sentiment_claims)
             
             # entities_ = [ent.strip() for ent in entities.split(',')]
              
