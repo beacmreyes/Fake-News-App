@@ -15,7 +15,7 @@ from openai import OpenAI
 
 st.set_page_config(layout='wide')
 
-api_key = open('openaiapikey.txt').read()
+api_key = st.secrets["api_key"] #open('openaiapikey.txt').read()
 client = OpenAI(api_key=api_key)
 SKLLMConfig.set_openai_key(api_key)
 df = pd.read_csv("data/Philippine Fake News Corpus - cleaned.csv")
