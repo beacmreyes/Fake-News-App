@@ -28,7 +28,7 @@ nltk.download('wordnet') # Downloads the WordNet lemmatizer data
 
 st.set_page_config(layout='wide')
 
-api_key = st.secrets["api_key"]##open('openaiapikey.txt').read()
+api_key = st.secrets["api_key"]##open('openaiapikey.txt').read() ##
 client = OpenAI(api_key=api_key)
 SKLLMConfig.set_openai_key(api_key)
 
@@ -627,18 +627,21 @@ def news_summarization():
     
             st.markdown(highlighted_keywords, unsafe_allow_html=True)    
             st.caption('**ENTITIES WITH SENTIMENTS**')
-            try:
-                st.subheader("Article's sentiment on entities mentioned")                     
-                identify_entities2 = identify_entities_with_sentiment(article)
-                st.write(identify_entities2)
-            except:
-                 pass
             # try:
-            # entities = identify_entities(article['Content'])
-            # entity_sentiment = identify_entity_sentiment(article['Content'], entities)
-            # entity_sentiment_claims = support_claims(article['Content'], entity_sentiment)
-            # st.write(entity_sentiment_claims)
-            
+            #     st.subheader("Article's sentiment on entities mentioned")                     
+            #     identify_entities2 = identify_entities_with_sentiment(article)
+            #     st.write(identify_entities2)
+            # except:
+            #      pass
+            try:
+                entities = identify_entities(article['Content'])
+                # st.write(entities)
+                entity_sentiment = identify_entity_sentiment(article['Content'], entities)
+                # st.write(entity_sentiment)
+                entity_sentiment_claims = support_claims(article['Content'], entity_sentiment)
+                st.write(entity_sentiment_claims)
+            except:
+                pass
             # entities_ = [ent.strip() for ent in entities.split(',')]
              
             # entities_positive_list = []
@@ -855,79 +858,49 @@ def interactive_quiz():
     
     
     st.write("Choose a headline below from below to view its contents. Five statements derived from this article will be given to you. Take your time and read through the article. For each claim or statement, decide whether or not this is more likely true, or more likely false. Click on the button to see if your answer is correct.")
-    session_state = get_session_state()
-    
-    sf_col1, sf_col2, sf_col3 = st.columns([2,2,5])
-    session_state = get_session_state()
-    filter_headlines = sf_col1.toggle('Filter Articles', value=session_state.filter_article_summarization, key = 'filter_article_summarization_key')
-    df_filtered = df 
-
-    if filter_headlines == True:
-        show_common_filter= sf_col2.toggle('Show Filter', value=False, key = 'show_common_filter_summarization_key')    
-        
-        if show_common_filter == True:
-             common_filter()        
-        df_filtered = session_state.df_filtered
 
     headline_temp = None
-    if len(df_filtered) >0:
-        headlines = df_filtered['Headline'].to_list()
-        art_col1, art_col2 = st.columns([7,2])
+    headlines = df['Headline'].to_list()
+    headline_temp = st.selectbox('Select article title', headlines , index=None)
+
+    article = None
+    if headline_temp is not None:    
+        article = df[df['Headline']==headline_temp].iloc[0]
+    
+    if article is not None:
+        article_sample_content = article['Content']
+    
+        st.markdown("*You may read the entire article down below to help you decide.*")
+        with st.expander("Here is the full article: click to expand"):
+            st.header(f"[{article['Headline']}]({article['URL']})")
+            st.caption(f"__Published date:__ {article['Date']}")# Main function to run the Streamlit app
+            st.write(article_sample_content)
+        try:
+            identified_claims = identify_claims(article = article_sample_content)
+            claims = [claim for claim in identified_claims[:-1].split('; ')]
+            for i, claim in enumerate(claims):
+                st.divider()
+                st.write(f"##### {claim}.")
+                choice = st.radio(label = '', 
+                                  options = ['This is more likely True.', 'This is more likely False.'], 
+                                  key = f"radio_{i}")
+                if st.button("Check Answer", key = f"button_{i}", type = "primary"):
+                    st.write(verify_claims(article = article_sample_content, claim = claim))
+        except:
+            pass
+        # this is the disclaimer message section hehehehe
         
-        headline_temp = art_col1.selectbox('Select article title', headlines , index=session_state.headline_index)
+        st.divider()
         
-        art_col2.write("<div style='height:30px'> </div>", unsafe_allow_html=True)           
-        apply_article = art_col2.button('Apply',use_container_width = True, key = 'article_apply_key')
-       
-        if apply_article:
-            session_state.headline = headline_temp            
-            if headline_temp is None:
-                session_state.headline_index = None
-                session_state.article = None
-            else:
-                session_state.headline_index = headlines.index(headline_temp)
-                article_temp = df_filtered[df_filtered['Headline']==headline_temp].iloc[0]
-                session_state.article = article_temp       
-
-            
-        if apply_article and session_state.article is not None:
-            article = session_state.article 
-
-
-
-            article_sample_content = article['Content']
-        
-            st.markdown("*You may read the entire article down below to help you decide.*")
-            with st.expander("Here is the full article: click to expand"):
-                st.header(f"[{article['Headline']}]({article['URL']})")
-                st.caption(f"__Published date:__ {article['Date']}")# Main function to run the Streamlit app
-                st.write(article_sample_content)
-            try:
-                identified_claims = identify_claims(article = article_sample_content)
-                claims = [claim for claim in identified_claims[:-1].split('; ')]
-                for i, claim in enumerate(claims):
-                    st.divider()
-                    st.write(f"##### {claim}.")
-                    choice = st.radio(label = '', 
-                                      options = ['This is more likely True.', 'This is more likely False.'], 
-                                      key = f"radio_{i}")
-                    if st.button("Check Answer", key = f"button_{i}", type = "primary"):
-                        st.write(verify_claims(article = article_sample_content, claim = claim))
-            except:
-                pass
-            # this is the disclaimer message section hehehehe
-            
-            st.divider()
-            
-            with st.expander("Read the Disclaimer"):
-                st.markdown("#### DISCLAIMER:")
-                st.write("The information and responses provided by this application are generated using OpenAI's ChatGPT. While we strive to provide accurate and helpful information, it is important to note the following: ")
-                st.markdown("1. **Accuracy:** The responses generated by ChatGPT are based on patterns and information from a wide range of sources, but they may not always be accurate, complete, or up-to-date. Users should independently verify any information provided by the application with credible news sources.")
-                st.markdown("2. **Context:** ChatGPT may not always fully understand the context of the news article, which can lead to responses that may be off-topic or out of context.")
-                st.markdown("3. **Bias:** The responses may reflect biases present in the training data. OpenAI has made efforts to reduce such biases, but they may still occasionally be present in the output.")
-                st.markdown("4. **Limitations:** ChatGPT cannot provide legal, medical, financial, or other professional advice. This application's purpose is to _guide the reader's discernment when encountering a news article containing facts or statements which may or may not be factual or credible._")
-                st.markdown("5. **Responsibility:** The use of this application is at your own risk. We are not responsible for any consequences arising from the use of the information provided by ChatGPT.")
-                st.markdown("By using this application, you acknowledge and accept these limitations and agree to use the information provided responsibly.")            
+        with st.expander("Read the Disclaimer"):
+            st.markdown("#### DISCLAIMER:")
+            st.write("The information and responses provided by this application are generated using OpenAI's ChatGPT. While we strive to provide accurate and helpful information, it is important to note the following: ")
+            st.markdown("1. **Accuracy:** The responses generated by ChatGPT are based on patterns and information from a wide range of sources, but they may not always be accurate, complete, or up-to-date. Users should independently verify any information provided by the application with credible news sources.")
+            st.markdown("2. **Context:** ChatGPT may not always fully understand the context of the news article, which can lead to responses that may be off-topic or out of context.")
+            st.markdown("3. **Bias:** The responses may reflect biases present in the training data. OpenAI has made efforts to reduce such biases, but they may still occasionally be present in the output.")
+            st.markdown("4. **Limitations:** ChatGPT cannot provide legal, medical, financial, or other professional advice. This application's purpose is to _guide the reader's discernment when encountering a news article containing facts or statements which may or may not be factual or credible._")
+            st.markdown("5. **Responsibility:** The use of this application is at your own risk. We are not responsible for any consequences arising from the use of the information provided by ChatGPT.")
+            st.markdown("By using this application, you acknowledge and accept these limitations and agree to use the information provided responsibly.")            
 
 def main():
 
@@ -952,7 +925,3 @@ def main():
         
 if __name__ == "__main__":
     main()
-
-
-
-
