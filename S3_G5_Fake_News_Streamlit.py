@@ -17,7 +17,6 @@ from skllm.models.gpt.classification.zero_shot import MultiLabelZeroShotGPTClass
 import openai
 from openai import OpenAI
 nltk.download('punkt')
-nltk.download('stopwords')
 
 st.set_page_config(layout='wide')
 
