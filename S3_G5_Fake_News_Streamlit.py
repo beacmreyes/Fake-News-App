@@ -8,9 +8,12 @@ from wordcloud import WordCloud
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
+from nltk.stem import PorterStemmer, WordNetLemmatizer
+import string
 from datetime import datetime, date
 import itertools
 from ast import literal_eval
+import seaborn as sns
 
 from skllm.config import SKLLMConfig
 from skllm.models.gpt.text2text.summarization import GPTSummarizer
@@ -18,13 +21,17 @@ from skllm.models.gpt.classification.zero_shot import MultiLabelZeroShotGPTClass
 import openai
 from openai import OpenAI
 
-nltk.download('punkt')
-nltk.download('stopwords')
+# Import libraries for nltk preprocessing
+nltk.download('punkt') # Downloads the Punkt tokenizer models
+nltk.download('stopwords') # Downloads the list of stopwords
+nltk.download('wordnet') # Downloads the WordNet lemmatizer data
+
 st.set_page_config(layout='wide')
 
-api_key = st.secrets["api_key"]#open('openaiapikey.txt').read()
+api_key = st.secrets["api_key"]##open('openaiapikey.txt').read()
 client = OpenAI(api_key=api_key)
 SKLLMConfig.set_openai_key(api_key)
+
 df = pd.read_csv("data/Philippine Fake News Corpus - cleaned.csv")
 df['Date'] = pd.to_datetime(df['Date'])
 df['Start of Month'] = (df['Date'].dt.to_period('M').dt.to_timestamp()).dt.date
@@ -244,6 +251,21 @@ def extract_keywords(text):
     except e:        
         return []
 
+# # Main Function, generate a response based on a given prompt
+# @st.cache_resource(show_spinner = "Loading...please wait")
+# def generate_response(article, prompt):
+#     response = client.chat.completions.create(
+#         model='gpt-3.5-turbo', 
+#         messages=[
+#             {'role': 'system', 
+#              'content': f"Perform the specified tasks based on this article: {article}"},
+#             {'role': 'user', 
+#              'content': prompt}
+#         ]
+#     )
+#     return response.choices[0].message.content
+
+
 def generate_response(article, prompt):
     response = client.chat.completions.create(
         model='gpt-3.5-turbo', 
@@ -293,7 +315,40 @@ def identify_entities_with_sentiment(article):
     prompt = f"Identify only the person and organization entities mentioned in the article along with the article's sentiment on each mentioned entity (whether Positive, Neutral or Negative)."
     entity = generate_response(article, prompt)
     return entity
-    
+
+
+
+@st.cache_resource(show_spinner = "Loading...please wait")
+def identify_claims(article):
+    prompt = f"""
+    Identify five claims made on this: {article}, and the entities who made such claim. 
+    Each claim should be formatted as a full sentence.
+    Return the claims as a semicolon-separated list, do not add numbers.
+    """
+    claims = generate_response(article, prompt)
+    return claims
+
+@st.cache_resource(show_spinner = "Loading...please wait")
+def verify_claims(article, claim):
+    system_prompt = 'You are a news analyst tasked to fact-check the claims made in news articles.'
+    main_prompt = f"""Identify whether or not the {claim} made in this {article} is more likely True or 
+    more likely not credible. 
+    First, state whether or not the {claim} is more likely True or more likely False. 
+    If {claim} is more likely False, give an explanation for the average reader 
+    why this is so. Explain this as if you were educating the average reader."""
+    response = client.chat.completions.create(
+        model='gpt-3.5-turbo', 
+        messages = [
+            {'role': 'system', 
+             'content': system_prompt},
+            {'role': 'user', 
+             'content': main_prompt}
+        ]
+    )
+    return response.choices[0].message.content
+
+
+
 ############SET COMMON FILTERS#########
 # filter_default_df = pd.read_csv("data/filter_default.csv")
 # st.write(filter_default_df)
@@ -640,51 +695,166 @@ def news_summarization():
 
 
 def ml_news_classifier():
-    st.title('Summarizing 2018 Articles')
-    session_state = get_session_state()
+    st.title("Using Traditional Machine Learning and Large Language Models to Assess the Credibility of a News Article")
+    st.markdown("### Pitting the Different Machine Learning and OpenAI Large Language Models Against Each Other")
     
-    sf_col1, sf_col2, sf_col3 = st.columns([2,2,5])
-    session_state = get_session_state()
-    filter_headlines = sf_col1.toggle('Filter Articles', value=session_state.filter_article_summarization, key = 'filter_article_summarization_key')
-    df_filtered = df 
-
-    if filter_headlines == True:
-        show_common_filter= sf_col2.toggle('Show Filter', value=False, key = 'show_common_filter_summarization_key')    
+    st.write("While more sophisticated Large Language Models (LLM) exist which can perform complex Natural Language Processing (NLP) tasks, let's see if we can still use traditional machine learning (ML) models to determine a news articles credibility based on its content alone.")
+    
+    st.markdown(" ##### Methodology")
+    st.write("We trained different types machine learning models traditionally used for classification tasks with the articles as training data. Each article content was cleaned, pre-processed, and tokenized. The features for the training and validation data were extracted using `TfidfVectorizer`. Each model was evaluated based on the Accuracy and the F1 score. A `DummyClassifier` model was used as sanity check.")
+    st.write("Aside from this, we also tested LLM Classifiers `ZeroShotGPTClassifier` and `FewShotGPTClassifier` on a subset of the dataset for comparison.")
+    
+    st.markdown(" ##### Results and Discussion")
+    st.markdown(" ###### Traditional ML Models")
+    
+    
+    df = pd.read_csv('data/traditional_ML_NLP.csv')
+    df.columns = ["Model", 'Train Accuracy', "Validation Accuracy", "Train F1", "Validation F1", "Run Time (s)"]
+    df.set_index(df["Model"], inplace = True)
+    df.drop("Model", axis = 1, inplace = True)
+    
+    # We plot the results
+    data_acc = df['Validation Accuracy'].sort_values()
+    
+    fig, ax = plt.subplots(1, 1, figsize = (10, 5))
+    
+    ax.barh(y = data_acc.index, 
+               width = data_acc.values,
+               color = ['mediumaquamarine' if x == data_acc.max() else 'lightgray' for x in data_acc.values])
+    
+    ax.set_xlabel('')
+    ax.set_xticks([])
+    ax.set_title("")
+    ax.set_yticks(list(data_acc.index))
+    ax.set_yticklabels(list(data_acc.index))
+    ax.set_title("ML Models by Accuracy Score")
+    ax.spines[["top","right", "bottom", "left"]].set_visible(False)
+    
+    for i in range(len(data_acc)):
+        ax.text(
+            y  = ax.get_yticks()[i]-0.12,
+            x = np.round(data_acc.values[i],2),
+            s = f'{np.round(data_acc.values[i]*100,2)}%',
+            fontsize = 10)
+    
         
-        if show_common_filter == True:
-             common_filter()        
-        df_filtered = session_state.df_filtered
-
-    headline_temp = None
-    if len(df_filtered) >0:
-        headlines = df_filtered['Headline'].to_list()
-        art_col1, art_col2 = st.columns([7,2])
+    dummy_acc = df.loc['Dummy Classifier', 'Validation Accuracy'] 
+    
+    # we add the dummy classifier accuracy score as sanity check
+    ax.axvline(x = dummy_acc, color = 'lightcoral', alpha = 0.8 , linestyle = '--')
+    ax.text(x = dummy_acc-0.25,
+               y = -0.8,
+               s = f"Dummy Classifier Accuracy: {np.round(dummy_acc * 100, 2)}%",
+               color = 'lightcoral')
         
-        headline_temp = art_col1.selectbox('Select article title', headlines , index=session_state.headline_index)
+    fig.tight_layout()
+    st.pyplot(fig)
+    st.caption("Accuracy scores of each model in identifying credible from not credible news.")
+    
+    data_f1 = df['Validation F1'].sort_values()
+    
+    fig, ax = plt.subplots(1, 1, figsize = (10, 5))
         
-        art_col2.write("<div style='height:30px'> </div>", unsafe_allow_html=True)           
-        apply_article = art_col2.button('Apply',use_container_width = True, key = 'article_apply_key')
-       
-        if apply_article:
-            session_state.headline = headline_temp            
-            if headline_temp is None:
-                session_state.headline_index = None
-                session_state.article = None
-            else:
-                session_state.headline_index = headlines.index(headline_temp)
-                article_temp = df_filtered[df_filtered['Headline']==headline_temp].iloc[0]
-                session_state.article = article_temp       
-
+    ax.barh(y = data_f1.index, 
+               width = data_f1.values,
+               color = ['mediumaquamarine' if x == data_f1.max() else 'lightgray' for x in data_f1.values])
+    
+    ax.set_xlabel('')
+    ax.set_xticks([])
+    ax.set_title("")
+    ax.set_yticks(list(data_f1.index))
+    ax.set_yticklabels(list(data_f1.index))
+    ax.set_title(f"ML Models by F1 Score")
+    ax.spines[["top","right", "bottom", "left"]].set_visible(False) 
+    
+    for j in range(len(data_f1)):
+        ax.text(
+            y  = ax.get_yticks()[j]-0.12,
+            x = np.round(data_f1.values[j],2),
+            s = f'{np.round(data_f1.values[j]*100,2)}%',
+            fontsize = 10)
+    
+    fig.tight_layout()
+    st.pyplot(fig)
+    st.caption("F1 scores of each model in identifying credible from not credible news.")
+    
+    st.write("In terms of accuracy, we note that most traditional models are able to perform at least better than random chance, but most however are not able to beat the `DummyClassifier` model, which serves as our sanity check model.")
+             
+    st.write("Recall that we mainly used the Term Frequency-Inverse Document Frequency (TF-IDF) matrix as the features for which we train our traditional ML models with. This method has several limitations:")
+    
+    st.markdown("**1. TF-IDF vectors are typically very high-dimensional.** This can make it difficult for some ML models to learn effectively, particularly those that don't handle high-dimensional data quite well.")
+    st.markdown("**2. TF-IDF only takes into consideration the frequencies of each word in each document and occurences within the corpus**. This may not encapsulate or capture all the relationships between words, the order of words, nuances, and specific contexts.")
+    st.markdown("**3. TF-IDF's vocabulary is restricted only within the corpus determined during the training period**. This means that the ML model will not be able to handle an encounter with a new word outside of its vocabularity. This would require retraining the models with a new training data every time, thus making it impractical.")
+    
+    st.caption("Summary of the scores and run times:")
+    st.dataframe(df[['Validation Accuracy', 'Validation F1', "Run Time (s)"]].sort_values(by = 'Validation Accuracy', 
+                                                                                         ascending = False))  
+    st.markdown(" ###### LLM Classifiers")
+    
+    st.write("Aside from this, we also tested LLM Classifiers `ZeroShotGPTClassifier` and `FewShotGPTClassifier` on a subset of 200 articles with a distribution of 'Credible' and 'Not Credible' news, comparable to the original dataset. For the Few Shot GPT Classifier, a subset of 20 articles (10 each labeled as 'Credible' and 'Not Credible'), were used to train the model, and the remainder was used for its evaluation." )
+    
+    st.write("A summary of the results are as follows:")
+    
+    llm_results = pd.read_csv('data/llm_results.csv') 
+    llm_results.columns = ['Model', 'Accuracy', 'F1 Score', 'Run Time (s)']
+    data_acc_llm = llm_results['Accuracy']
+    data_f1_llm = llm_results['F1 Score']
+    
+    metrics = ['Accuracy', 'F1 Score']
+    
+    fig, ax = plt.subplots(nrows = 1, ncols = 2, figsize = (7, 3), sharey = True)
+    
+    for i, data in enumerate([data_acc_llm, data_f1_llm]):
+    
+        ax[i].bar(x = data.index, height = data.values,
+                color = ['steelblue' if x == data.max() else 'lightgray' for x in data.values])
+        ax[i].spines[['left', 'right', 'top', 'bottom']].set_visible(False)
+        ax[i].set_xticks(list(data.index))
+        ax[i].set_xticklabels(['Zero Shot', 'Few Shot'], fontsize = 8)
+        ax[i].set_ylabel('')
+        ax[i].set_yticks([])
+        ax[i].set_xlabel(f"{metrics[i]}")
+        
+        for j in range(len(data)):
+            ax[i].text(
+                x  = ax[i].get_xticks()[j]-0.12,
+                y = np.round(data.values[j],2)+0.01,
+                s = f'{np.round(data.values[j]*100,2)}%')
             
-        if apply_article and session_state.article is not None:
-            article = session_state.article 
-            st.header(f"[{article['Headline']}]({article['URL']})")
-            st.caption(f"__Published date:__ {article['Date']}")
+    fig.suptitle("LLM Performance")
+    fig.tight_layout()
+    st.pyplot(fig)
+    
+    st.write("The findings show that large language models, which are trained on vast amounts of data and are more complex in design, also did not seem to fair any better in terms of their accuracy. Of note, LLM's are superior to the traditional ML models in terms of the F1 score. On the other hand, the run time for these models are considerably much longer (see below).")
+    st.write()
+    
+    st.dataframe(llm_results.set_index('Model'))
+    
+    st.markdown("We note the limitations of LLM's ability to assess a news articles' credibility:")
+    
+    st.markdown("1. A **broader context or external references** may be needed to ascertain the accuracy or credibility of the claims made in an article. Information might be incomplete, misleading, or taken out of context.")
+    
+    st.markdown("2. **Identifying bias in an article is a complex task** which required broad domain knowledge, and information on the author's, sources', and publication's potential biases; LLM's might be able to pick up on thes subtle nuances.")
+    
+    st.markdown("3. **Verifying the factual accuracy of statements in an article typically requires cross-referencing with other reliable sources**. Analyzing content alone limits this fact-checking ability.")
+    
+    st.markdown("4. **Some misinformation are crafted to appear highly credible**, using legitimate sources out of context or blending true information with falsehoods in a convincing manner. These subtle differences can be missed easily.")
+    
+    st.markdown(" ##### Summary and Conclusion")
+    st.markdown("To summarize, _all of the models have varying degrees of difficulty in differentiating credible from not credible news based on the content of the material alone_. The GPT Classifiers had the best F1 score amongst all the model, while also having the longest run time.")
+    
+    st.markdown("*__These findings highlight the complexity involved in the very heavy task of differentiating real, credible news from 'fake' news.__* Further measures must be put in place to ensure proper assessment of the credibility of news articles.")
+    
+    ## I'll try to add here yung choose a model and see their predictions part if may time tonight, i-paste lang below this divider
+    st.divider()
 
 
 def interactive_quiz():
-    st.title('Interactive quiz: Test your knowledge')
-    st.title('Summarizing 2018 Articles')
+    st.title("Test Yourself!")
+    st.header("Can You Identify Which Claims are More Likely to be False?")
+    
+    
+    st.write("Choose a headline below from below to view its contents. Five statements derived from this article will be given to you. Take your time and read through the article. For each claim or statement, decide whether or not this is more likely true, or more likely false. Click on the button to see if your answer is correct.")
     session_state = get_session_state()
     
     sf_col1, sf_col2, sf_col3 = st.columns([2,2,5])
@@ -722,8 +892,43 @@ def interactive_quiz():
             
         if apply_article and session_state.article is not None:
             article = session_state.article 
-            st.header(f"[{article['Headline']}]({article['URL']})")
-            st.caption(f"__Published date:__ {article['Date']}")# Main function to run the Streamlit app
+
+
+
+            article_sample_content = article['Content']
+        
+            st.markdown("*You may read the entire article down below to help you decide.*")
+            with st.expander("Here is the full article: click to expand"):
+                st.header(f"[{article['Headline']}]({article['URL']})")
+                st.caption(f"__Published date:__ {article['Date']}")# Main function to run the Streamlit app
+                st.write(article_sample_content)
+            try:
+                identified_claims = identify_claims(article = article_sample_content)
+                claims = [claim for claim in identified_claims[:-1].split('; ')]
+                for i, claim in enumerate(claims):
+                    st.divider()
+                    st.write(f"##### {claim}.")
+                    choice = st.radio(label = '', 
+                                      options = ['This is more likely True.', 'This is more likely False.'], 
+                                      key = f"radio_{i}")
+                    if st.button("Check Answer", key = f"button_{i}", type = "primary"):
+                        st.write(verify_claims(article = article_sample_content, claim = claim))
+            except:
+                pass
+            # this is the disclaimer message section hehehehe
+            
+            st.divider()
+            
+            with st.expander("Read the Disclaimer"):
+                st.markdown("#### DISCLAIMER:")
+                st.write("The information and responses provided by this application are generated using OpenAI's ChatGPT. While we strive to provide accurate and helpful information, it is important to note the following: ")
+                st.markdown("1. **Accuracy:** The responses generated by ChatGPT are based on patterns and information from a wide range of sources, but they may not always be accurate, complete, or up-to-date. Users should independently verify any information provided by the application with credible news sources.")
+                st.markdown("2. **Context:** ChatGPT may not always fully understand the context of the news article, which can lead to responses that may be off-topic or out of context.")
+                st.markdown("3. **Bias:** The responses may reflect biases present in the training data. OpenAI has made efforts to reduce such biases, but they may still occasionally be present in the output.")
+                st.markdown("4. **Limitations:** ChatGPT cannot provide legal, medical, financial, or other professional advice. This application's purpose is to _guide the reader's discernment when encountering a news article containing facts or statements which may or may not be factual or credible._")
+                st.markdown("5. **Responsibility:** The use of this application is at your own risk. We are not responsible for any consequences arising from the use of the information provided by ChatGPT.")
+                st.markdown("By using this application, you acknowledge and accept these limitations and agree to use the information provided responsibly.")            
+
 def main():
 
     my_page = st.sidebar.radio('Page Navigation',
