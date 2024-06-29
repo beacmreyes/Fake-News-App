@@ -592,6 +592,7 @@ def news_summarization():
         apply_article = art_col2.button('Apply',use_container_width = True, key = 'article_apply_key')
        
         if apply_article:
+            session_state.filter_article_summarization = filter_headlines
             session_state.headline = headline_temp            
             if headline_temp is None:
                 session_state.headline_index = None
