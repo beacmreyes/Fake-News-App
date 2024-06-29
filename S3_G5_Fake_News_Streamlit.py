@@ -558,12 +558,12 @@ def interactive_highlights():
         word_cloud_fig = word_cloud(content,label_suffix) 
         st.pyplot(word_cloud_fig)
         
-        show_filtered_data = st.toggle('Show Filter Data', value=False , key = 'show_filtered_data_key')               
+        show_filtered_data = st.toggle('Show Filtered Data', value=False , key = 'show_filtered_data_key')               
         if show_filtered_data:
             st.write(df_filtered[['Headline', 'Content', 'Date', 'Source', 'Authors', 'URL', 'Label']])
         
     else:
-        st.write("<div style='height: 80px;font-size: 30px;text-align: center; padding:20px'>No Found Article</div>", unsafe_allow_html=True)   
+        st.write("<div style='height: 80px;font-size: 30px;text-align: center; padding:20px'>No Article Found</div>", unsafe_allow_html=True)   
 
 def news_summarization():
     st.title('Summarizing 2018 Articles')
@@ -692,7 +692,8 @@ def news_summarization():
 
 
     else:
-        st.write('No articles found')
+        st.write("<div style='height: 80px;font-size: 30px;text-align: center; padding:20px'>No Article Found</div>", unsafe_allow_html=True)   
+
     
 
 
